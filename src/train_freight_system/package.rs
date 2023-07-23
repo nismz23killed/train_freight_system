@@ -2,19 +2,19 @@ use crate::util::kilogram::Kilogram;
 
 use super::{node::NodeId, train::TrainId};
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, PartialEq, Clone)]
 pub enum Status {
     #[default]
     NotReady,
-    DroppedAt(NodeId),
+    DroppedAt(NodeId, TrainId),
     LoadedTo(TrainId),
-    Delivered,
+    Delivered(TrainId),
 }
 
-#[derive(Debug, Default, PartialEq)]
+#[derive(Debug, Default, PartialEq, Clone)]
 pub struct PackageId(pub String);
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct Package {
     pub id: PackageId,
     pub weight: Kilogram,
@@ -26,9 +26,9 @@ impl Package {
     pub fn new(name: &str, weight: Kilogram, origin: NodeId, destination: NodeId) -> Self {
         let status: Status;
         if origin == destination {
-            status = Status::Delivered;
+            status = Status::Delivered(TrainId::default());
         } else {
-            status = Status::DroppedAt(origin);
+            status = Status::DroppedAt(origin, TrainId::default());
         }
 
         Self {

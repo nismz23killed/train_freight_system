@@ -24,6 +24,10 @@ impl Node {
         self.edges.iter().position(|edge| edge.id == *id)
     }
 
+    pub fn find_edge_with_node(&self, node_id: &NodeId) -> Option<&Edge> {
+        self.edges.iter().find(|&edge| edge.node == *node_id)
+    }
+
     pub fn add_edge(&mut self, edge: Edge) -> Result<()> {
         if self.find_edge_index_by_id(&edge.id).is_some() {
             return Err(Error::new(

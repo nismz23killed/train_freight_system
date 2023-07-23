@@ -14,10 +14,13 @@ async fn main() -> Result<()> {
         .edge("E1", "A", "B", Minute(30))?
         .edge("E2", "B", "C", Minute(10))?
         .package("K1", Kilogram(5), "A", "C")?
-        .train("Q1", Kilogram(6), "B")?;
+        .train("Q1", Kilogram(6), "A")?;
 
     let total_delivery_time = system.deliver_packages();
 
-    println!("total journey time to complete the delivery: {:?}", total_delivery_time);
+    println!(
+        "completed delivery in: {:?}",
+        total_delivery_time
+    );
     Ok(())
 }
