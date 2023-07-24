@@ -11,10 +11,13 @@ async fn main() -> Result<()> {
         .node("A")?
         .node("B")?
         .node("C")?
+        .node("D")?
         .edge("E1", "A", "B", Minute(30))?
         .edge("E2", "B", "C", Minute(10))?
-        .package("K1", Kilogram(5), "A", "C")?
-        .train("Q1", Kilogram(6), "A")?;
+        .edge("E3", "C", "D", Minute(20))?
+        .package("K1", Kilogram(5), "C", "A")?
+        .package("K2", Kilogram(4), "D", "A")?
+        .train("Q1", Kilogram(10), "B")?;
 
     let total_delivery_time = system.deliver_packages();
 

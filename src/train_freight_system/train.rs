@@ -70,6 +70,11 @@ impl Train {
 
         self.load_size = self.load_size.clone() - package.weight.clone();
     }
+
+    pub fn can_accomodate_package(&self, package: &Package) -> bool {
+        let available_size = self.max_capacity.clone() - self.load_size.clone();
+        available_size >= package.weight 
+    }
 }
 
 #[derive(Debug, Default)]
@@ -96,6 +101,10 @@ impl TrainHandler {
         }
         self.trains.push(train);
         Ok(())
+    }
+
+    pub fn get_train(&self, train_id: &TrainId) -> Option<&Train> {
+        self.trains.iter().find(|train| train.id == *train_id)
     }
 
     fn find_train_index_by_name(&self, train_name: &str) -> Option<usize> {
@@ -187,5 +196,16 @@ impl TrainHandler {
     ) {
         let pos = self.find_train_index_by_id(train_id).unwrap();
         self.trains[pos].move_to(origin, destination, travel_time);
+    }
+
+    pub fn list_stopped_trains_at_node(&mut self, node_id: &NodeId) -> Vec<TrainId> {
+        self.trains.iter_mut().filter(|train| {
+            match &train.status {
+                Status::StoppedAt(id) => id == node_id,
+                _ => false, 
+            }
+        })
+        .map(|train| train.id.clone())
+        .collect()
     }
 }

@@ -3,7 +3,7 @@ use super::{
     error::{Error, ErrorKind, Result},
 };
 
-#[derive(Debug, Default, PartialEq, Clone)]
+#[derive(Debug, Default, PartialEq, Clone, Hash, Eq)]
 pub struct NodeId(pub String);
 
 #[derive(Debug, Default)]

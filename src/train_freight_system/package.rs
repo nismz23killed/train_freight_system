@@ -45,10 +45,10 @@ impl Package {
         }
     }
 
-    pub fn get_carrier(&self) -> Option<&TrainId> {
+    pub fn get_location(&self) -> Option<&NodeId> {
         match &self.status {
-            Status::LoadedTo(train) => Some(train),
-            _ => None,
+            Status::DroppedAt(node_id, _) => Some(node_id),
+            _ => None
         }
     }
 }
@@ -140,5 +140,13 @@ impl PackageHandler {
             })
             .map(|package| package.id.0.to_owned())
             .collect()
+    }
+
+    pub fn list_undelivered_packages(&self) -> Vec<PackageId> {
+        self.packages.iter().filter(|package| {
+            matches!(&package.status, Status::DroppedAt(_, _))
+        })
+        .map(|package| package.id.clone())
+        .collect()
     }
 }

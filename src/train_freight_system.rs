@@ -20,6 +20,7 @@ pub enum DeliveryResult {
     NoTrains,
     NotAllPackageLoaded,
     AllPackageLoaded,
+    TrainPicking,
 }
 
 #[derive(Debug, Default)]
@@ -205,6 +206,19 @@ impl TrainFreightSystem {
         least_travel_time_route
     }
 
+    fn list_all_undelivered_packages_least_possible_routes(&mut self) -> Vec<Vec<NodeId>> {
+        let packages = self.package_handler.list_undelivered_packages();
+        let mut packages_routes: Vec<Vec<NodeId>> = vec![];
+        for package_id in &packages {
+            let package = self.package_handler.get_package(package_id).unwrap();
+            let node_id = package.get_location().unwrap();
+            let node_index = self.find_node_index_by_id(node_id).unwrap();
+            let routes = self.get_least_time_path_to_deliver_package(node_index, package_id);
+            packages_routes.push(routes);
+        }
+        packages_routes
+    }
+
     fn deliver_packages_in_node(&mut self, node_id: &NodeId, node_index: usize) -> DeliveryResult {
         let packages = self
             .package_handler
@@ -232,8 +246,30 @@ impl TrainFreightSystem {
         }
 
         let destination = &highest_routes[1];
-
         let filtered_packages = self.get_packages_passing_to_node(destination, &packages);
+        // Before loading packages, check if there are packages closer to
+        // this route that can still fit in this train.
+        // if there are then move train to that direction
+        let all_routes = self.list_all_undelivered_packages_least_possible_routes();
+        for routes in &all_routes {
+            let diff: Vec<&NodeId> = routes.iter().filter(|node_id| !highest_routes.contains(node_id)).rev().collect();
+            for check_node_id in diff.clone() {
+                let time1 = self.get_travel_time_from_routes(&vec![check_node_id.clone(), node_id.clone()]);
+                let time2 = self.get_travel_time_from_routes(&highest_routes);
+                if time1 < time2 {
+                    let packages = self.package_handler.list_undelivered_packages_at_node(check_node_id);
+                    for package_id in &packages {
+                        let train = self.train_handler.get_train(&biggest_train).unwrap();
+                        let this_package = self.package_handler.get_package(package_id).unwrap();
+                        if train.can_accomodate_package(this_package) {
+                            let time =  self.get_travel_time_from_routes(&vec![diff[0].clone(), node_id.clone()]);
+                            self.train_handler.move_to_node(&biggest_train, node_id, diff[0], time);
+                            return DeliveryResult::TrainPicking;
+                        }
+                    }
+                }
+            }
+        }
 
         for package_id in filtered_packages.iter() {
             let package = self.package_handler.get_package_mut(package_id).unwrap();
@@ -286,11 +322,28 @@ impl TrainFreightSystem {
                     DeliveryResult::NoPackages
                     | DeliveryResult::NoTrains
                     | DeliveryResult::AllPackageLoaded => break,
-                    DeliveryResult::NotAllPackageLoaded => continue,
+                    DeliveryResult::NotAllPackageLoaded
+                    | DeliveryResult::TrainPicking => continue,
                 }
             }
         }
         // have packages not picked up and have trains not moving
+        let dropped_packages = self.package_handler.list_undelivered_packages();
+        for package_id in &dropped_packages {
+            let package = self.package_handler.get_package(package_id).unwrap();
+            let node_id = package.get_location().unwrap();
+            let node_index = self.find_node_index_by_id(node_id).unwrap();
+            let routes = self.get_least_time_path_to_deliver_package(node_index, package_id);
+
+            for i in 1..routes.len() {
+                for train_id in &self.train_handler.list_stopped_trains_at_node(&routes[i]){
+                    let this_route = vec![routes[i-1].clone(), routes[i].clone()];
+                    let travel_time = self.get_travel_time_from_routes(&this_route);
+                    self.train_handler.move_to_node(train_id, &routes[i], &routes[i-1], travel_time);
+                    break;
+                }
+            }
+        }
     }
 
     fn train_arrived(&mut self) -> Minute {
