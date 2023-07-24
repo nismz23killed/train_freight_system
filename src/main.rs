@@ -1,16 +1,7 @@
-use serde::{Deserialize, Serialize};
-
-use serde_derive::Deserialize;
 use train_freight_system::{
-    train_freight_system::error::Result,
     train_freight_system::TrainFreightSystem,
     util::{kilogram::Kilogram, minute::Minute},
 };
-
-#[derive(Deserialize, Debug)]
-struct NodeInput {
-    name: String,
-}
 
 fn show_options() {
     println!("Select options below");
