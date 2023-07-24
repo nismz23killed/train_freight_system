@@ -1,6 +1,6 @@
 # train_freight_system
 
-Run the app using rust cargo run
+Build and run the app using rust cargo
 
 ex:
 ```
