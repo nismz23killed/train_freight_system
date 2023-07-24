@@ -18,9 +18,6 @@ async fn main() -> Result<()> {
 
     let total_delivery_time = system.deliver_packages();
 
-    println!(
-        "completed delivery in: {:?}",
-        total_delivery_time
-    );
+    println!("completed delivery in: {:?}", total_delivery_time);
     Ok(())
 }

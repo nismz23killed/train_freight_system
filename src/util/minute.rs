@@ -1,6 +1,6 @@
 use std::ops::{Add, Sub};
 
-#[derive(Debug, Default, Clone, PartialEq, PartialOrd)]
+#[derive(Debug, Default, Clone, PartialEq, PartialOrd, Ord, Eq)]
 pub struct Minute(pub u32);
 
 impl Add for Minute {

@@ -38,4 +38,18 @@ impl Package {
             status,
         }
     }
+
+    pub fn is_package_loaded_in_train(&self, train_id: &TrainId) -> bool {
+        match &self.status {
+            Status::LoadedTo(train) => train == train_id,
+            _ => false,
+        }
+    }
+
+    pub fn get_carrier(&self) -> Option<&TrainId> {
+        match &self.status {
+            Status::LoadedTo(train) => Some(train),
+            _ => None,
+        }
+    }
 }
