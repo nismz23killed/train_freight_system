@@ -131,44 +131,37 @@ impl TrainHandler {
     }
 
     pub fn get_moving_train_lowest_travel_time(&self) -> Option<Minute> {
-        self.trains.iter().filter_map(|train| {
-            match &train.status {
-                Status::DeliveringTo(_, _, travel_time) => {
-                    Some(travel_time.clone())
-                },
+        self.trains
+            .iter()
+            .filter_map(|train| match &train.status {
+                Status::DeliveringTo(_, _, travel_time) => Some(travel_time.clone()),
                 _ => None,
-            }
-        }).min()
+            })
+            .min()
     }
 
     pub fn time_elapsed(&mut self, duration: &Minute) {
         for train in &mut self.trains {
-            match &train.status.clone() {
-                Status::DeliveringTo(origin, destination, travel_time) => {
-                    let remaining_time = travel_time.clone() - duration.clone();
-                    if remaining_time == Minute(0) {
-                        train.stopped(destination);
-                    } else {
-                        train.move_to(origin, destination, remaining_time);
-                    }
-                },
-                _ => {},
+            if let Status::DeliveringTo(origin, destination, travel_time) = &train.status.clone() {
+                let remaining_time = travel_time.clone() - duration.clone();
+                if remaining_time == Minute(0) {
+                    train.stopped(destination);
+                } else {
+                    train.move_to(origin, destination, remaining_time);
+                }
             }
         }
     }
 
     fn list_stopped_trains(&self) -> Vec<TrainId> {
-        self.trains.iter().filter(|train| {
-            match &train.status {
-                Status::StoppedAt(_) => true,
-                _ => false,
-            }
-       })
-       .map(|train| train.id.clone())
-       .collect()
+        self.trains
+            .iter()
+            .filter(|train| matches!(&train.status, Status::StoppedAt(_)))
+            .map(|train| train.id.clone())
+            .collect()
     }
 
-    pub fn unload_packages_in_trains_that_stopped(&mut self, packages: &mut Vec<Package>) {
+    pub fn unload_packages_in_trains_that_stopped(&mut self, packages: &mut [Package]) {
         for train_id in &self.list_stopped_trains() {
             for package in packages.iter_mut() {
                 if package.is_package_loaded_in_train(train_id) {
@@ -185,7 +178,13 @@ impl TrainHandler {
         self.trains[pos].load_package(package);
     }
 
-    pub fn move_to_node(&mut self, train_id: &TrainId, origin: &NodeId, destination: &NodeId, travel_time: Minute) {
+    pub fn move_to_node(
+        &mut self,
+        train_id: &TrainId,
+        origin: &NodeId,
+        destination: &NodeId,
+        travel_time: Minute,
+    ) {
         let pos = self.find_train_index_by_id(train_id).unwrap();
         self.trains[pos].move_to(origin, destination, travel_time);
     }

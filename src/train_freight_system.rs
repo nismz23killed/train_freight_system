@@ -4,7 +4,7 @@ use self::{
     edge::Edge,
     error::{Error, ErrorKind, Result},
     node::{Node, NodeId},
-    package::{Package, PackageId},
+    package::{PackageHandler, PackageId},
     train::TrainHandler,
 };
 
@@ -26,7 +26,7 @@ pub enum DeliveryResult {
 pub struct TrainFreightSystem {
     pub nodes: Vec<Node>,
     pub train_handler: TrainHandler,
-    pub packages: Vec<Package>,
+    pub package_handler: PackageHandler,
 }
 
 impl TrainFreightSystem {
@@ -108,17 +108,6 @@ impl TrainFreightSystem {
         Ok(self)
     }
 
-    fn find_package_index_by_name(&self, name: &str) -> Option<usize> {
-        let package_id = PackageId(name.into());
-        self.find_package_index_by_id(&package_id)
-    }
-
-    fn find_package_index_by_id(&self, package_id: &PackageId) -> Option<usize> {
-        self.packages
-            .iter()
-            .position(|package| package.id == *package_id)
-    }
-
     pub fn package(
         &mut self,
         name: &str,
@@ -142,38 +131,9 @@ impl TrainFreightSystem {
 
         let origin_id = self.nodes[origin_pos].id.clone();
         let destination_id = self.nodes[destination_pos].id.clone();
-
-        if self.find_package_index_by_name(name).is_some() {
-            return Err(Error::new(
-                ErrorKind::AddPackageError,
-                format!("Package '{name}' already existed"),
-            )
-            .into());
-        }
-        self.packages
-            .push(Package::new(name, weight, origin_id, destination_id));
+        self.package_handler
+            .add_package(name, weight, origin_id, destination_id)?;
         Ok(self)
-    }
-
-    fn have_undelivered_packages(&self) -> bool {
-        self.packages.iter().any(|package| match &package.status {
-            package::Status::NotReady => false,
-            package::Status::DroppedAt(_, _) => true,
-            package::Status::LoadedTo(_) => true,
-            package::Status::Delivered(_) => false,
-        })
-    }
-
-    fn list_undelivered_packages_at_node(&self, node_id: &NodeId) -> Vec<PackageId> {
-        let packages = self.packages.clone();
-        packages
-            .into_iter()
-            .filter(|package| match &package.status {
-                package::Status::DroppedAt(id, _) => id == node_id,
-                _ => false,
-            })
-            .map(|x| x.id)
-            .collect()
     }
 
     fn get_travel_time_from_routes(&self, routes: &Vec<NodeId>) -> Minute {
@@ -220,11 +180,7 @@ impl TrainFreightSystem {
         node_index: usize,
         package_id: &PackageId,
     ) -> Vec<NodeId> {
-        let package = self
-            .packages
-            .iter()
-            .find(|package| package.id == *package_id)
-            .unwrap();
+        let package = self.package_handler.get_package(package_id).unwrap();
 
         let node = &self.nodes[node_index];
         let mut possible_routes: Vec<Vec<NodeId>> = vec![];
@@ -250,7 +206,9 @@ impl TrainFreightSystem {
     }
 
     fn deliver_packages_in_node(&mut self, node_id: &NodeId, node_index: usize) -> DeliveryResult {
-        let packages = self.list_undelivered_packages_at_node(node_id);
+        let packages = self
+            .package_handler
+            .list_undelivered_packages_at_node(node_id);
         if packages.is_empty() {
             return DeliveryResult::NoPackages;
         }
@@ -275,14 +233,11 @@ impl TrainFreightSystem {
 
         let destination = &highest_routes[1];
 
-        let filtered_packages = self
-            .get_packages_passing_to_node(destination, &packages)
-            ;
+        let filtered_packages = self.get_packages_passing_to_node(destination, &packages);
 
-        for package in filtered_packages.iter() {
-            let pos: usize = self.find_package_index_by_id(package).unwrap();
-            let package_to_load = &mut self.packages[pos];
-            self.train_handler.load_package(&biggest_train, package_to_load);
+        for package_id in filtered_packages.iter() {
+            let package = self.package_handler.get_package_mut(package_id).unwrap();
+            self.train_handler.load_package(&biggest_train, package);
         }
 
         let travel_time = self.nodes[node_index]
@@ -290,9 +245,14 @@ impl TrainFreightSystem {
             .unwrap()
             .travel_time
             .clone();
-        self.train_handler.move_to_node(&biggest_train, node_id, destination, travel_time);
+        self.train_handler
+            .move_to_node(&biggest_train, node_id, destination, travel_time);
 
-        if !self.list_undelivered_packages_at_node(node_id).is_empty() {
+        if !self
+            .package_handler
+            .list_undelivered_packages_at_node(node_id)
+            .is_empty()
+        {
             return DeliveryResult::NotAllPackageLoaded;
         }
 
@@ -334,10 +294,14 @@ impl TrainFreightSystem {
     }
 
     fn train_arrived(&mut self) -> Minute {
-        let least_travel_time = self.train_handler.get_moving_train_lowest_travel_time().unwrap_or(Minute(0));
+        let least_travel_time = self
+            .train_handler
+            .get_moving_train_lowest_travel_time()
+            .unwrap_or(Minute(0));
         self.train_handler.time_elapsed(&least_travel_time);
 
-        self.train_handler.unload_packages_in_trains_that_stopped(&mut self.packages);
+        self.train_handler
+            .unload_packages_in_trains_that_stopped(&mut self.package_handler.packages);
 
         least_travel_time.clone()
     }
@@ -345,7 +309,7 @@ impl TrainFreightSystem {
     pub fn deliver_packages(&mut self) -> Minute {
         let mut total_delivery_time = Minute(0);
 
-        while self.have_undelivered_packages() {
+        while self.package_handler.have_undelivered_packages() {
             let travel_time = self.train_arrived();
             total_delivery_time = total_delivery_time + travel_time;
             self.deliver_packages_in_nodes();
@@ -359,34 +323,15 @@ impl TrainFreightSystem {
                     _ => ("".into(), "".into()),
                 };
 
-                let packages_loaded: Vec<String> = self
-                    .packages
-                    .iter()
-                    .filter(|package| match &package.status {
-                        package::Status::LoadedTo(train_id) => train_id == &train.id,
-                        _ => false,
-                    })
-                    .map(|package| package.id.0.to_owned())
-                    .collect();
-
-                let packages_dropped: Vec<String> = self
-                    .packages
-                    .iter()
-                    .filter(|package| match &package.status {
-                        package::Status::Delivered(train_id) => train_id == &train.id,
-                        _ => false,
-                    })
-                    .map(|package| package.id.0.to_owned())
-                    .collect();
-
                 println!(
                     "W={}, T={}, N1={}, P1={:?}, N2={}, P2 ={:?}",
                     total_delivery_time.0,
                     train.id.0,
                     origin,
-                    packages_loaded,
+                    self.package_handler
+                        .list_package_names_in_transit(&train.id),
                     destination,
-                    packages_dropped
+                    self.package_handler.list_package_names_delivered(&train.id)
                 );
             }
         }
