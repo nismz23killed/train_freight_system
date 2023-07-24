@@ -31,7 +31,7 @@ pub struct TrainFreightSystem {
 }
 
 impl TrainFreightSystem {
-    pub fn node(&mut self, name: &str) -> Result<&mut Self> {
+    pub fn add_node(&mut self, name: &str) -> Result<()> {
         if self.find_node_index_by_name(name).is_some() {
             return Err(Error::new(
                 ErrorKind::AddStationError,
@@ -41,7 +41,7 @@ impl TrainFreightSystem {
         }
 
         self.nodes.push(Node::new(name));
-        Ok(self)
+        Ok(())
     }
 
     fn find_node_index_by_name(&self, node_name: &str) -> Option<usize> {
@@ -52,13 +52,13 @@ impl TrainFreightSystem {
         self.nodes.iter().position(|node| node.id == *node_id)
     }
 
-    pub fn edge(
+    pub fn add_edge(
         &mut self,
         name: &str,
         node_1: &str,
         node_2: &str,
         travel_time: Minute,
-    ) -> Result<&mut Self> {
+    ) -> Result<()> {
         let node_1_pos = self.find_node_index_by_name(node_1).ok_or_else(|| {
             Error::new(
                 ErrorKind::AddEdgeError,
@@ -88,15 +88,10 @@ impl TrainFreightSystem {
             travel_time.clone(),
         ))?;
         self.nodes[node_2_pos].add_edge(Edge::new(name, NodeId(node_1.into()), travel_time))?;
-        Ok(self)
+        Ok(())
     }
 
-    pub fn train(
-        &mut self,
-        name: &str,
-        max_capacity: Kilogram,
-        location: &str,
-    ) -> Result<&mut Self> {
+    pub fn add_train(&mut self, name: &str, max_capacity: Kilogram, location: &str) -> Result<()> {
         let pos = self.find_node_index_by_name(location).ok_or_else(|| {
             Error::new(
                 ErrorKind::AddTrainError,
@@ -106,16 +101,16 @@ impl TrainFreightSystem {
 
         self.train_handler
             .add_train(name, max_capacity, &self.nodes[pos].id)?;
-        Ok(self)
+        Ok(())
     }
 
-    pub fn package(
+    pub fn add_package(
         &mut self,
         name: &str,
         weight: Kilogram,
         origin: &str,
         destination: &str,
-    ) -> Result<&mut Self> {
+    ) -> Result<()> {
         let origin_pos = self.find_node_index_by_name(origin).ok_or_else(|| {
             Error::new(
                 ErrorKind::AddPackageError,
@@ -134,7 +129,7 @@ impl TrainFreightSystem {
         let destination_id = self.nodes[destination_pos].id.clone();
         self.package_handler
             .add_package(name, weight, origin_id, destination_id)?;
-        Ok(self)
+        Ok(())
     }
 
     fn get_travel_time_from_routes(&self, routes: &Vec<NodeId>) -> Minute {
@@ -252,18 +247,29 @@ impl TrainFreightSystem {
         // if there are then move train to that direction
         let all_routes = self.list_all_undelivered_packages_least_possible_routes();
         for routes in &all_routes {
-            let diff: Vec<&NodeId> = routes.iter().filter(|node_id| !highest_routes.contains(node_id)).rev().collect();
+            let diff: Vec<&NodeId> = routes
+                .iter()
+                .filter(|node_id| !highest_routes.contains(node_id))
+                .rev()
+                .collect();
             for check_node_id in diff.clone() {
-                let time1 = self.get_travel_time_from_routes(&vec![check_node_id.clone(), node_id.clone()]);
+                let time1 =
+                    self.get_travel_time_from_routes(&vec![check_node_id.clone(), node_id.clone()]);
                 let time2 = self.get_travel_time_from_routes(&highest_routes);
                 if time1 < time2 {
-                    let packages = self.package_handler.list_undelivered_packages_at_node(check_node_id);
+                    let packages = self
+                        .package_handler
+                        .list_undelivered_packages_at_node(check_node_id);
                     for package_id in &packages {
                         let train = self.train_handler.get_train(&biggest_train).unwrap();
                         let this_package = self.package_handler.get_package(package_id).unwrap();
                         if train.can_accomodate_package(this_package) {
-                            let time =  self.get_travel_time_from_routes(&vec![diff[0].clone(), node_id.clone()]);
-                            self.train_handler.move_to_node(&biggest_train, node_id, diff[0], time);
+                            let time = self.get_travel_time_from_routes(&vec![
+                                diff[0].clone(),
+                                node_id.clone(),
+                            ]);
+                            self.train_handler
+                                .move_to_node(&biggest_train, node_id, diff[0], time);
                             return DeliveryResult::TrainPicking;
                         }
                     }
@@ -322,8 +328,7 @@ impl TrainFreightSystem {
                     DeliveryResult::NoPackages
                     | DeliveryResult::NoTrains
                     | DeliveryResult::AllPackageLoaded => break,
-                    DeliveryResult::NotAllPackageLoaded
-                    | DeliveryResult::TrainPicking => continue,
+                    DeliveryResult::NotAllPackageLoaded | DeliveryResult::TrainPicking => continue,
                 }
             }
         }
@@ -336,10 +341,15 @@ impl TrainFreightSystem {
             let routes = self.get_least_time_path_to_deliver_package(node_index, package_id);
 
             for i in 1..routes.len() {
-                for train_id in &self.train_handler.list_stopped_trains_at_node(&routes[i]){
-                    let this_route = vec![routes[i-1].clone(), routes[i].clone()];
+                for train_id in &self.train_handler.list_stopped_trains_at_node(&routes[i]) {
+                    let this_route = vec![routes[i - 1].clone(), routes[i].clone()];
                     let travel_time = self.get_travel_time_from_routes(&this_route);
-                    self.train_handler.move_to_node(train_id, &routes[i], &routes[i-1], travel_time);
+                    self.train_handler.move_to_node(
+                        train_id,
+                        &routes[i],
+                        &routes[i - 1],
+                        travel_time,
+                    );
                     break;
                 }
             }

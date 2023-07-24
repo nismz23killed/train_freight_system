@@ -73,7 +73,7 @@ impl Train {
 
     pub fn can_accomodate_package(&self, package: &Package) -> bool {
         let available_size = self.max_capacity.clone() - self.load_size.clone();
-        available_size >= package.weight 
+        available_size >= package.weight
     }
 }
 
@@ -199,13 +199,13 @@ impl TrainHandler {
     }
 
     pub fn list_stopped_trains_at_node(&mut self, node_id: &NodeId) -> Vec<TrainId> {
-        self.trains.iter_mut().filter(|train| {
-            match &train.status {
+        self.trains
+            .iter_mut()
+            .filter(|train| match &train.status {
                 Status::StoppedAt(id) => id == node_id,
-                _ => false, 
-            }
-        })
-        .map(|train| train.id.clone())
-        .collect()
+                _ => false,
+            })
+            .map(|train| train.id.clone())
+            .collect()
     }
 }

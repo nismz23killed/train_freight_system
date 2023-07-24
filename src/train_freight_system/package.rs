@@ -48,7 +48,7 @@ impl Package {
     pub fn get_location(&self) -> Option<&NodeId> {
         match &self.status {
             Status::DroppedAt(node_id, _) => Some(node_id),
-            _ => None
+            _ => None,
         }
     }
 }
@@ -143,10 +143,10 @@ impl PackageHandler {
     }
 
     pub fn list_undelivered_packages(&self) -> Vec<PackageId> {
-        self.packages.iter().filter(|package| {
-            matches!(&package.status, Status::DroppedAt(_, _))
-        })
-        .map(|package| package.id.clone())
-        .collect()
+        self.packages
+            .iter()
+            .filter(|package| matches!(&package.status, Status::DroppedAt(_, _)))
+            .map(|package| package.id.clone())
+            .collect()
     }
 }
