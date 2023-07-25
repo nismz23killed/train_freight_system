@@ -416,10 +416,9 @@ impl TrainFreightSystem {
         self.blacklist_packages_that_cant_be_transported();
 
         while self.package_handler.have_undelivered_packages() {
-            let travel_time = self.train_arrived();
-            total_delivery_time = total_delivery_time + travel_time;
             self.deliver_packages_in_nodes();
 
+            let travel_time = self.train_arrived();
 
             for train in &self.train_handler.trains {
                 let (origin, destination) = match &train.status {
@@ -441,6 +440,8 @@ impl TrainFreightSystem {
                     self.package_handler.list_package_names_delivered(&train.id)
                 );
             }
+
+            total_delivery_time = total_delivery_time + travel_time;
         }
 
         total_delivery_time
