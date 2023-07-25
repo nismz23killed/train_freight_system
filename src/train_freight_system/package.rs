@@ -5,11 +5,16 @@ use super::{error::Error, error::ErrorKind, error::Result, node::NodeId, train::
 #[derive(Debug, Default, PartialEq, Clone)]
 pub enum Status {
     #[default]
-    NotReady,
+    // Delivered and completed, so it wont be reflected in report in succeeding run
+    Completed,
+    //Dropped at station(NodeId) by a train(TrainId)
     DroppedAt(NodeId, TrainId),
+    //Load to train (TrainId)
     LoadedTo(TrainId),
+    //Delivered by train(TrainId)
     Delivered(TrainId),
-    CantBeTransported(NodeId, TrainId),
+    //No trains can carry the package(weight is too heavy), location(nNodeId)
+    CantBeTransported(NodeId),
 }
 
 #[derive(Debug, Default, PartialEq, Clone)]
@@ -55,8 +60,8 @@ impl Package {
 
     pub fn drop_to_origin(&mut self) {
         match &self.status {
-            Status::CantBeTransported(node_id, train_id) => {
-                self.status = Status::DroppedAt(node_id.clone(), train_id.clone());
+            Status::CantBeTransported(node_id) => {
+                self.status = Status::DroppedAt(node_id.clone(), TrainId::default());
             },
             _ => {},
         }
@@ -64,8 +69,8 @@ impl Package {
 
     pub fn set_to_cant_be_transported(&mut self) {
         match &self.status {
-            Status::DroppedAt(node_id, train_id) => {
-                self.status = Status::CantBeTransported(node_id.clone(), train_id.clone());
+            Status::DroppedAt(node_id, _) => {
+                self.status = Status::CantBeTransported(node_id.clone());
             },
             _ => {},
         }
@@ -110,11 +115,11 @@ impl PackageHandler {
 
     pub fn have_undelivered_packages(&self) -> bool {
         self.packages.iter().any(|package| match &package.status {
-            Status::NotReady => false,
+            Status::Completed => false,
             Status::DroppedAt(_, _) => true,
             Status::LoadedTo(_) => true,
             Status::Delivered(_) => false,
-            Status::CantBeTransported(_, _) => false,
+            Status::CantBeTransported(_) => false,
         })
     }
 
@@ -182,9 +187,19 @@ impl PackageHandler {
         self.packages
             .iter_mut()
             .filter(|package| {
-                matches!(&package.status, Status::CantBeTransported(_, _))
+                matches!(&package.status, Status::CantBeTransported(_))
             })
             .map(|package| package)
             .collect()
+    }
+
+    pub fn delist_delivered_packages(&mut self) {
+        let packages: Vec<&mut Package> = self.packages.iter_mut().filter(|package| 
+            matches!(package.status, Status::Delivered(_))
+        ).collect();
+
+        for package in packages {
+            package.status = Status::Completed;
+        }
     }
 }

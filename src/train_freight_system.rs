@@ -442,6 +442,8 @@ impl TrainFreightSystem {
             }
 
             total_delivery_time = total_delivery_time + travel_time;
+
+            self.package_handler.delist_delivered_packages();
         }
 
         total_delivery_time
