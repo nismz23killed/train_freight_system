@@ -38,7 +38,7 @@ impl Train {
         self.status = Status::StoppedAt(location);
     }
 
-    pub fn get_location(&mut self) -> Option<NodeId> {
+    pub fn get_location(&self) -> Option<NodeId> {
         match &self.status {
             Status::StoppedAt(node) => Some(node.clone()),
             _ => None,
@@ -136,7 +136,7 @@ impl TrainHandler {
                 biggest_train_index = Some(index);
             }
         }
-        biggest_train_index.map(|index| self.trains[index].id.clone())
+        biggest_train_index.map(|index| trains[index].id.clone())
     }
 
     pub fn get_moving_train_lowest_travel_time(&self) -> Option<Minute> {
@@ -162,7 +162,7 @@ impl TrainHandler {
         }
     }
 
-    fn list_stopped_trains(&self) -> Vec<TrainId> {
+    pub fn list_stopped_trains(&self) -> Vec<TrainId> {
         self.trains
             .iter()
             .filter(|train| matches!(&train.status, Status::StoppedAt(_)))
@@ -207,5 +207,14 @@ impl TrainHandler {
             })
             .map(|train| train.id.clone())
             .collect()
+    }
+
+    pub fn can_pacakge_be_transported_by_any_trains(&self, package: &Package) -> bool {
+        for train in &self.trains {
+            if train.can_accomodate_package(package) {
+                return true;
+            }
+        }
+        false
     }
 }

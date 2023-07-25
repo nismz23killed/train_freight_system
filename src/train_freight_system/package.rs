@@ -9,6 +9,7 @@ pub enum Status {
     DroppedAt(NodeId, TrainId),
     LoadedTo(TrainId),
     Delivered(TrainId),
+    CantBeTransported(NodeId, TrainId),
 }
 
 #[derive(Debug, Default, PartialEq, Clone)]
@@ -49,6 +50,24 @@ impl Package {
         match &self.status {
             Status::DroppedAt(node_id, _) => Some(node_id),
             _ => None,
+        }
+    }
+
+    pub fn drop_to_origin(&mut self) {
+        match &self.status {
+            Status::CantBeTransported(node_id, train_id) => {
+                self.status = Status::DroppedAt(node_id.clone(), train_id.clone());
+            },
+            _ => {},
+        }
+    }
+
+    pub fn set_to_cant_be_transported(&mut self) {
+        match &self.status {
+            Status::DroppedAt(node_id, train_id) => {
+                self.status = Status::CantBeTransported(node_id.clone(), train_id.clone());
+            },
+            _ => {},
         }
     }
 }
@@ -95,6 +114,7 @@ impl PackageHandler {
             Status::DroppedAt(_, _) => true,
             Status::LoadedTo(_) => true,
             Status::Delivered(_) => false,
+            Status::CantBeTransported(_, _) => false,
         })
     }
 
@@ -147,6 +167,24 @@ impl PackageHandler {
             .iter()
             .filter(|package| matches!(&package.status, Status::DroppedAt(_, _)))
             .map(|package| package.id.clone())
+            .collect()
+    }
+
+    pub fn list_undelivered_packages_mut(&mut self) -> Vec<&mut Package> {
+        self.packages
+            .iter_mut()
+            .filter(|package| matches!(&package.status, Status::DroppedAt(_, _)))
+            .map(|package| package)
+            .collect()
+    }
+
+    pub fn list_cant_be_transported_packages_mut(&mut self) -> Vec<&mut Package> {
+        self.packages
+            .iter_mut()
+            .filter(|package| {
+                matches!(&package.status, Status::CantBeTransported(_, _))
+            })
+            .map(|package| package)
             .collect()
     }
 }

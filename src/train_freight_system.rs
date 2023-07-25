@@ -4,7 +4,7 @@ use self::{
     edge::Edge,
     error::{Error, ErrorKind, Result},
     node::{Node, NodeId},
-    package::{PackageHandler, PackageId},
+    package::{PackageHandler, PackageId, Package},
     train::TrainHandler,
 };
 
@@ -171,19 +171,16 @@ impl TrainFreightSystem {
         }
     }
 
-    fn get_least_time_path_to_deliver_package(
+    fn get_least_time_path_to_move_from_point_a_to_point_b(
         &self,
-        node_index: usize,
-        package_id: &PackageId,
+        node_a_id: &NodeId,
+        node_b_id: &NodeId,
     ) -> Vec<NodeId> {
-        let package = self.package_handler.get_package(package_id).unwrap();
-
-        let node = &self.nodes[node_index];
         let mut possible_routes: Vec<Vec<NodeId>> = vec![];
         let mut routes: Vec<NodeId> = vec![];
         self.get_all_possible_routes(
-            &node.id,
-            &package.destination,
+            node_a_id,
+            node_b_id,
             &mut possible_routes,
             &mut routes,
         );
@@ -201,14 +198,17 @@ impl TrainFreightSystem {
         least_travel_time_route
     }
 
+    fn get_least_time_path_to_deliver_package(&self, package: &Package) -> Vec<NodeId> {
+        let origin = package.get_location().unwrap();
+        return self.get_least_time_path_to_move_from_point_a_to_point_b(origin, &package.destination);
+    }
+
     fn list_all_undelivered_packages_least_possible_routes(&mut self) -> Vec<Vec<NodeId>> {
         let packages = self.package_handler.list_undelivered_packages();
         let mut packages_routes: Vec<Vec<NodeId>> = vec![];
         for package_id in &packages {
             let package = self.package_handler.get_package(package_id).unwrap();
-            let node_id = package.get_location().unwrap();
-            let node_index = self.find_node_index_by_id(node_id).unwrap();
-            let routes = self.get_least_time_path_to_deliver_package(node_index, package_id);
+            let routes = self.get_least_time_path_to_deliver_package(package);
             packages_routes.push(routes);
         }
         packages_routes
@@ -233,8 +233,9 @@ impl TrainFreightSystem {
         };
 
         let mut highest_routes: Vec<NodeId> = vec![];
-        for package in packages.iter() {
-            let routes = self.get_least_time_path_to_deliver_package(node_index, package);
+        for package_id in packages.iter() {
+            let package = self.package_handler.get_package(package_id).unwrap();
+            let routes = self.get_least_time_path_to_deliver_package(package);
             if routes.len() > highest_routes.len() {
                 highest_routes = routes;
             }
@@ -287,6 +288,7 @@ impl TrainFreightSystem {
             .unwrap()
             .travel_time
             .clone();
+
         self.train_handler
             .move_to_node(&biggest_train, node_id, destination, travel_time);
 
@@ -306,15 +308,15 @@ impl TrainFreightSystem {
         node_id: &NodeId,
         packages: &Vec<PackageId>,
     ) -> Vec<PackageId> {
-        let node_index = self.find_node_index_by_id(node_id).unwrap();
         let mut filtered_packages: Vec<PackageId> = vec![];
-        for package in packages {
+        for package_id in packages {
+            let package = self.package_handler.get_package(package_id).unwrap();
             if self
-                .get_least_time_path_to_deliver_package(node_index, package)
+                .get_least_time_path_to_move_from_point_a_to_point_b(node_id, &package.destination)
                 .iter()
                 .any(|id| id == node_id)
             {
-                filtered_packages.push(package.clone());
+                filtered_packages.push(package_id.clone());
             }
         }
         filtered_packages
@@ -324,11 +326,13 @@ impl TrainFreightSystem {
         let nodes: Vec<NodeId> = self.nodes.iter().map(|node| node.id.clone()).collect();
         for (index, node_id) in nodes.iter().enumerate() {
             loop {
-                match self.deliver_packages_in_node(node_id, index) {
+                let result = self.deliver_packages_in_node(node_id, index);
+                match result {
                     DeliveryResult::NoPackages
                     | DeliveryResult::NoTrains
-                    | DeliveryResult::AllPackageLoaded => break,
-                    DeliveryResult::NotAllPackageLoaded | DeliveryResult::TrainPicking => continue,
+                    | DeliveryResult::AllPackageLoaded
+                    | DeliveryResult::TrainPicking => break,
+                    DeliveryResult::NotAllPackageLoaded => continue,
                 }
             }
         }
@@ -336,10 +340,9 @@ impl TrainFreightSystem {
         let dropped_packages = self.package_handler.list_undelivered_packages();
         for package_id in &dropped_packages {
             let package = self.package_handler.get_package(package_id).unwrap();
-            let node_id = package.get_location().unwrap();
-            let node_index = self.find_node_index_by_id(node_id).unwrap();
-            let routes = self.get_least_time_path_to_deliver_package(node_index, package_id);
+            let routes = self.get_least_time_path_to_deliver_package(package);
 
+            let mut has_trains_moved = false;
             for i in 1..routes.len() {
                 for train_id in &self.train_handler.list_stopped_trains_at_node(&routes[i]) {
                     let this_route = vec![routes[i - 1].clone(), routes[i].clone()];
@@ -350,9 +353,24 @@ impl TrainFreightSystem {
                         &routes[i - 1],
                         travel_time,
                     );
+                    has_trains_moved = true;
                     break;
                 }
             }
+
+            // find trains not the path
+            if !has_trains_moved {
+                let train_ids = self.train_handler.list_stopped_trains().clone();
+                if !train_ids.is_empty() {
+                    let train = self.train_handler.get_train(&train_ids[0]).unwrap();
+                    let train_location = train.get_location().unwrap();
+                    let routes = self.get_least_time_path_to_move_from_point_a_to_point_b(&train_location, &package.destination);
+                    let time = self.get_travel_time_from_routes(&vec![train_location.clone(), routes[1].clone()]);
+                    self.train_handler.move_to_node(&train_ids[0], &train_location, &routes[1], time);
+                }
+            }
+
+            // find trains that 
         }
     }
 
@@ -369,13 +387,33 @@ impl TrainFreightSystem {
         least_travel_time.clone()
     }
 
+    pub fn blacklist_packages_that_cant_be_transported(&mut self) {
+        // Check for dropped packages at station where that no train can carry them
+        for package in self.package_handler.list_undelivered_packages_mut() {
+            if !self.train_handler.can_pacakge_be_transported_by_any_trains(package) {
+                package.set_to_cant_be_transported();
+            }
+        }
+
+        // Check if we have packages that no train can carry them and verify if
+        // we have trains now that can.
+        for package in self.package_handler.list_cant_be_transported_packages_mut() {
+            if self.train_handler.can_pacakge_be_transported_by_any_trains(package) {
+                package.drop_to_origin();
+            }
+        }
+    }
+
     pub fn deliver_packages(&mut self) -> Minute {
         let mut total_delivery_time = Minute(0);
+
+        self.blacklist_packages_that_cant_be_transported();
 
         while self.package_handler.have_undelivered_packages() {
             let travel_time = self.train_arrived();
             total_delivery_time = total_delivery_time + travel_time;
             self.deliver_packages_in_nodes();
+
 
             for train in &self.train_handler.trains {
                 let (origin, destination) = match &train.status {
@@ -400,5 +438,34 @@ impl TrainFreightSystem {
         }
 
         total_delivery_time
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test] 
+    fn test_system() {
+        let mut system = TrainFreightSystem::default();
+        system.add_node("A").expect("can't add node");
+        system.add_node("B").expect("can't add node");
+        system.add_node("C").expect("can't add node");
+        system.add_edge("E1", "A", "B", Minute(30)).expect("can't add edge");
+        system.add_edge("E2", "C", "B", Minute(10)).expect("can't add edge");
+        system.add_package("K1", Kilogram(5), "A", "C").expect("Can't add package");
+        system.add_train("Q1", Kilogram(6), "B").expect("Can't add train");
+        let total_travel_time = system.deliver_packages();
+        assert_eq!(total_travel_time, Minute(70));
+
+        // Can't transport package
+        system.add_package("K2", Kilogram(25), "B", "A").expect("Can't add package");
+        let total_travel_time = system.deliver_packages();
+        assert_eq!(total_travel_time, Minute(0));
+ 
+        system.add_train("Q2", Kilogram(30), "C").expect("Can't add train");
+        let total_travel_time = system.deliver_packages();
+        assert_eq!(total_travel_time, Minute(50));
     }
 }
