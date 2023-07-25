@@ -347,26 +347,32 @@ impl TrainFreightSystem {
                 for train_id in &self.train_handler.list_stopped_trains_at_node(&routes[i]) {
                     let this_route = vec![routes[i - 1].clone(), routes[i].clone()];
                     let travel_time = self.get_travel_time_from_routes(&this_route);
-                    self.train_handler.move_to_node(
-                        train_id,
-                        &routes[i],
-                        &routes[i - 1],
-                        travel_time,
-                    );
-                    has_trains_moved = true;
-                    break;
+                    let train = self.train_handler.get_train(train_id).unwrap();
+                    if train.can_accomodate_package(package) {
+                        self.train_handler.move_to_node(
+                            train_id,
+                            &routes[i],
+                            &routes[i - 1],
+                            travel_time,
+                        );
+                        has_trains_moved = true;
+                        break;
+                    }
                 }
             }
 
             // find trains not the path
             if !has_trains_moved {
                 let train_ids = self.train_handler.list_stopped_trains().clone();
-                if !train_ids.is_empty() {
-                    let train = self.train_handler.get_train(&train_ids[0]).unwrap();
+                for train_id in &train_ids {
+                    let train = self.train_handler.get_train(&train_id).unwrap();
                     let train_location = train.get_location().unwrap();
                     let routes = self.get_least_time_path_to_move_from_point_a_to_point_b(&train_location, &package.destination);
                     let time = self.get_travel_time_from_routes(&vec![train_location.clone(), routes[1].clone()]);
-                    self.train_handler.move_to_node(&train_ids[0], &train_location, &routes[1], time);
+                    if train.can_accomodate_package(package) {
+                        self.train_handler.move_to_node(&train_id, &train_location, &routes[1], time);
+                        break;
+                    }
                 }
             }
 
@@ -457,15 +463,19 @@ mod tests {
         system.add_package("K1", Kilogram(5), "A", "C").expect("Can't add package");
         system.add_train("Q1", Kilogram(6), "B").expect("Can't add train");
         let total_travel_time = system.deliver_packages();
+        println!("total travel time {:?}", total_travel_time);
         assert_eq!(total_travel_time, Minute(70));
 
         // Can't transport package
         system.add_package("K2", Kilogram(25), "B", "A").expect("Can't add package");
         let total_travel_time = system.deliver_packages();
+        println!("total travel time {:?}", total_travel_time);
         assert_eq!(total_travel_time, Minute(0));
  
+        println!("start");
         system.add_train("Q2", Kilogram(30), "C").expect("Can't add train");
         let total_travel_time = system.deliver_packages();
-        assert_eq!(total_travel_time, Minute(50));
+        println!("total travel time {:?}", total_travel_time);
+        assert_eq!(total_travel_time, Minute(40));
     }
 }
